@@ -3,3 +3,5 @@
 .env
 .venv/
 .env.local
+__pycache__/
+.DS_Store

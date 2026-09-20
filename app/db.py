@@ -6,7 +6,6 @@ and cached just under that. Locally, PGPASSWORD is used as-is.
 """
 import os
 import time
-import uuid
 from contextlib import contextmanager
 
 import psycopg
@@ -28,10 +27,10 @@ def _password() -> str:
 
     from databricks.sdk import WorkspaceClient
 
-    instance = os.environ["LAKEBASE_INSTANCE"]
-    cred = WorkspaceClient().database.generate_database_credential(
-        request_id=str(uuid.uuid4()), instance_names=[instance]
-    )
+    # LAKEBASE_ENDPOINT is injected by the postgres app resource, in the form
+    # projects/{project}/branches/{branch}/endpoints/{endpoint}.
+    endpoint = os.environ["LAKEBASE_ENDPOINT"]
+    cred = WorkspaceClient().postgres.generate_database_credential(endpoint)
     _cached = (cred.token, time.monotonic() + _TOKEN_TTL)
     return cred.token
 
