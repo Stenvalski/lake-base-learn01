@@ -35,6 +35,28 @@ def _password() -> str:
     return cred.token
 
 
+def _actor() -> str:
+    """The signed-in end user.
+
+    Databricks Apps forwards the caller's identity in request headers. Falling
+    back to the service principal would make every change look identical, so
+    an unknown caller is recorded as such rather than silently attributed.
+    """
+    try:
+        from flask import has_request_context, request
+
+        if has_request_context():
+            for header in ("X-Forwarded-Email",
+                           "X-Forwarded-Preferred-Username",
+                           "X-Forwarded-User"):
+                value = request.headers.get(header)
+                if value:
+                    return value
+    except Exception:
+        pass
+    return os.environ.get("APP_ACTOR") or "unknown"
+
+
 @contextmanager
 def connect():
     with psycopg.connect(
@@ -46,6 +68,8 @@ def connect():
         sslmode=os.environ.get("PGSSLMODE", "require"),
         row_factory=dict_row,
     ) as conn:
+        # Read by the audit trigger; see migrations/V12__audit_trail.sql.
+        conn.execute("SELECT set_config('app.user', %s, false)", (_actor(),))
         yield conn
 
 

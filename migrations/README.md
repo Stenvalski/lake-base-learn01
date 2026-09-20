@@ -19,6 +19,7 @@ Project `learn01` / branch `production` / database `databricks_postgres`
       V9__country_version_no_overlap.sql         EXCLUDE constraint on version intervals
       V10__grant_app_service_principal.sql       table grants for the Databricks App
       V11__revoke_app_access_to_schema_history.sql keeps the app out of flyway's history
+      V12__audit_trail.sql                       audit_log + trigger, with end-user attribution
 
 ## Auth
 
@@ -37,7 +38,7 @@ when deployed.
 
 ## State
 
-At V11 as of 2026-09-21. `./fw info` is the source of truth.
+At V12 as of 2026-09-21. `./fw info` is the source of truth.
 
 `public.country` predates Flyway, so V1 is recorded as Ignored (Baseline) and
 is never executed; the table it describes already exists. V2 and V3 ran for
@@ -77,9 +78,28 @@ a clean handover (one row's active_to equal to the next's active_from) is
 allowed while any real overlap is rejected. An open-ended row is treated as
 running to 'infinity'.
 
+## Audit trail
+
+Every INSERT, UPDATE and DELETE on `residency_requirement` writes one
+`audit_log` row per changed column, recording old value, new value, timestamp
+and who made the change. The trigger cannot be bypassed: a direct `psql`
+update is logged too, attributed to `session_user`.
+
+Attribution comes from the `app.user` session setting, which `db.py` sets per
+connection from the identity Databricks Apps forwards. Locally, set
+`APP_ACTOR`; if neither is present the change records as `unknown` rather than
+being silently attributed to the service principal.
+
+`log_audit()` is SECURITY DEFINER, so the app writes audit rows through the
+trigger while holding no privileges on `audit_log` itself.
+
+Not yet covered: `country` and `country_version` have no audit trigger
+(migrations are the only writer today), there is no reason-for-change captured
+from the UI, and the table owner can still modify `audit_log` directly.
+
 ## Adding a change
 
-Drop a new file in migrations/ named V12__<description>.sql, then:
+Drop a new file in migrations/ named V13__<description>.sql, then:
 
     ./fw info      # confirm it shows Pending
     ./fw migrate
