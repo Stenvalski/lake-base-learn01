@@ -1,0 +1,5 @@
+#!/bin/sh
+# Run flyway with the Lakebase OAuth token pulled from the clipboard,
+# so the token is never written to disk or echoed.
+# Refresh it from the workspace Connect dialog -> "Copy OAuth token" (expires hourly).
+exec flyway -configFiles=flyway.conf -password="$(pbpaste)" "$@"
