@@ -16,6 +16,7 @@ Project `learn01` / branch `production` / database `databricks_postgres`
       V6__split_country_identity_and_version.sql country -> country + country_version
       V7__repoint_residency_requirement.sql      FK moved to the identity table
       V8__drop_country_version_alpha2.sql        alpha2 now lives only on country
+      V9__country_version_no_overlap.sql         EXCLUDE constraint on version intervals
 
 ## Auth
 
@@ -31,7 +32,7 @@ Databricks CLI token fetch.
 
 ## State
 
-At V8 as of 2026-09-20. `./fw info` is the source of truth.
+At V9 as of 2026-09-20. `./fw info` is the source of truth.
 
 `public.country` predates Flyway, so V1 is recorded as Ignored (Baseline) and
 is never executed; the table it describes already exists. V2 and V3 ran for
@@ -65,6 +66,12 @@ Net schema:
 A rename is now a new `country_version` row; `residency_requirement` is
 untouched by it because it points at the identity.
 
+V9 makes overlapping version intervals impossible: an EXCLUDE constraint over
+`(country_id =, tsrange(active_from, active_to) &&)`, using half-open ranges so
+a clean handover (one row's active_to equal to the next's active_from) is
+allowed while any real overlap is rejected. An open-ended row is treated as
+running to 'infinity'.
+
 ## Adding a change
 
 Drop a new file in migrations/ named V9__<description>.sql, then:
@@ -91,6 +98,7 @@ Drop a new file in migrations/ named V9__<description>.sql, then:
 - Renaming a table in a migration does not rename its identity sequence or its
   constraints; V6 renames both explicitly to avoid colliding with the new
   `country`.
-- `country_version` rows for SE overlap by ~0.3s (active_to is later than the
-  next row's active_from). Not fixed. An EXCLUDE constraint would prevent the
-  class of bug, but needs btree_gist and a data fix first.
+- Closing out a version and opening the next must set active_to equal to the
+  new row's active_from. Anything else is rejected by V9's EXCLUDE constraint.
+- V9 enables the btree_gist extension, needed to mix `=` on an integer with
+  `&&` on a range in one EXCLUDE constraint.
