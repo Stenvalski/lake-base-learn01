@@ -11,6 +11,8 @@ Project `learn01` / branch `production` / database `databricks_postgres`
       V1__baseline_country.sql                   pg_dump of public.country, applied as BASELINE
       V2__country_alpha2_current_unique.sql      partial unique index on alpha2 (superseded by V3)
       V3__drop_country_alpha2_current_unique.sql drops it again
+      V4__residency_requirement.sql              residency_requirement table
+      V5__seed_residency_requirement.sql         sample rows for DK/FI/SE (fabricated)
 
 ## Auth
 
@@ -26,7 +28,7 @@ Databricks CLI token fetch.
 
 ## State
 
-At V3 as of 2026-09-20. `./fw info` is the source of truth.
+At V5 as of 2026-09-20. `./fw info` is the source of truth.
 
 `public.country` predates Flyway, so V1 is recorded as Ignored (Baseline) and
 is never executed; the table it describes already exists. V2 and V3 ran for
@@ -38,11 +40,17 @@ so V3 drops it. V2 was left in place rather than edited: Flyway checksums
 applied migrations, and changing one breaks `validate` on every database that
 already ran it. Retract by rolling forward.
 
-Net schema: `country` has a primary key on `id` and no other indexes.
+V4 adds `residency_requirement`, keyed to `country(id)`. V5 seeds it with
+16 invented rows -- placeholder data for testing joins, NOT real immigration
+requirements.
+
+Net schema: `country` has a primary key on `id` and no other indexes;
+`residency_requirement` has a primary key, an FK to `country(id)`, and an
+index on `country_id`.
 
 ## Adding a change
 
-Drop a new file in migrations/ named V4__<description>.sql, then:
+Drop a new file in migrations/ named V6__<description>.sql, then:
 
     ./fw info      # confirm it shows Pending
     ./fw migrate
@@ -58,3 +66,7 @@ Drop a new file in migrations/ named V4__<description>.sql, then:
 - `country.id` is GENERATED ALWAYS AS IDENTITY -- INSERTs must omit it, and
   gaps in the sequence are normal.
 - Never edit an applied migration; add a new version that reverses it.
+- `residency_requirement.country_id` points at one `country` row, not at an
+  alpha2 code. Sweden is id 5; id 2 (Sverige) is the superseded row. If a
+  country is superseded again, existing requirement rows keep pointing at the
+  old id -- decide then whether to repoint them or key on alpha2 instead.
