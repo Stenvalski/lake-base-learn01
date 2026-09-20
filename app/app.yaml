@@ -1,0 +1,6 @@
+command: ["gunicorn", "app:server", "--bind", "0.0.0.0:8000", "--workers", "2"]
+env:
+  - name: LAKEBASE_ENDPOINT
+    valueFrom: postgres
+  - name: LAKEBASE_INSTANCE
+    value: learn01

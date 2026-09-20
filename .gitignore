@@ -1,3 +1,5 @@
 # Never commit a Lakebase OAuth token or any local override
 *.local.conf
 .env
+.venv/
+.env.local

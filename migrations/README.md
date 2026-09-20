@@ -102,3 +102,42 @@ Drop a new file in migrations/ named V9__<description>.sql, then:
   new row's active_from. Anything else is rejected by V9's EXCLUDE constraint.
 - V9 enables the btree_gist extension, needed to mix `=` on an integer with
   `&&` on a range in one EXCLUDE constraint.
+
+## The app
+
+`app/` is a Dash app using AG Grid (Community edition) to view and edit
+`residency_requirement`. Edits save on cell change; rows can be added and
+deleted. Deployed on Databricks Apps it authenticates as the app's service
+principal; locally it uses a clipboard token, like Flyway.
+
+### Run it locally
+
+One-time setup -- Dash does not work on Python 3.14 (`pkgutil.find_loader` was
+removed), so pin 3.12:
+
+    uv venv -p 3.12 .venv
+    VIRTUAL_ENV=.venv uv pip install -r app/requirements.txt
+
+Then, each session:
+
+1. Workspace -> Lakebase Postgres -> learn01 -> Connect -> "Copy OAuth token".
+2. `./run-local.sh`
+3. Open http://localhost:8050
+
+`run-local.sh` reads connection settings from `.env.local` and takes the
+password from the clipboard, so no token is written to disk. The token lasts
+an hour; when it expires the app reports a connection error and you re-copy.
+
+`.env.local` and `.venv/` are gitignored.
+
+### Deploying to Databricks Apps
+
+`app/app.yaml` declares the Lakebase endpoint as a resource. On deploy,
+Databricks creates a service principal for the app, grants it a Postgres role,
+and injects PGHOST/PGPORT/PGDATABASE/PGSSLMODE. `app/db.py` then mints a fresh
+OAuth token per connection via the SDK
+(`WorkspaceClient().database.generate_database_credential`), cached for 50
+minutes, so nothing on the clipboard is involved.
+
+Free Edition allows up to 3 apps, and an app stops automatically 24 hours
+after being started or redeployed; restart it from the workspace.
