@@ -16,16 +16,23 @@ COLUMNS = [
     {"field": "id", "headerName": "ID", "width": 90, "editable": False,
      "checkboxSelection": True},
     {"field": "country_name", "headerName": "Country", "width": 140, "editable": False},
-    {"field": "document_name", "headerName": "Document", "flex": 1},
-    {"field": "description", "headerName": "Description", "flex": 2,
-     "cellEditor": "agLargeTextCellEditor", "cellEditorPopup": True},
+    {"field": "document_name", "headerName": "Document", "flex": 2,
+     "minWidth": 220},
+    {"field": "description", "headerName": "Description", "flex": 3,
+     "cellEditor": "agLargeTextCellEditor", "cellEditorPopup": True,
+     "wrapText": True,
+     # AG Grid sets line-height to the row height, so wrapped lines are far
+     # too tall to fit; override it or only the first line is visible.
+     "cellStyle": {"lineHeight": "1.4", "whiteSpace": "normal",
+                   "display": "flex", "alignItems": "center"}},
     {"field": "mandatory", "headerName": "Mandatory", "width": 130,
      "cellRenderer": "agCheckboxCellRenderer",
      "cellEditor": "agCheckboxCellEditor"},
 ]
 
 app.layout = html.Div(
-    style={"maxWidth": "1100px", "margin": "2rem auto", "fontFamily": "system-ui"},
+    style={"width": "96vw", "maxWidth": "1800px", "margin": "1.5rem auto",
+           "fontFamily": "system-ui"},
     children=[
         html.H2("Residency requirements"),
         html.P("Documents required for permanent residence. Click a cell to edit; "
@@ -47,7 +54,8 @@ app.layout = html.Div(
             columnDefs=COLUMNS,
             rowData=[],
             defaultColDef={"editable": True, "sortable": True, "resizable": True},
-            dashGridOptions={"rowSelection": "multiple", "animateRows": True},
+            dashGridOptions={"rowSelection": "multiple", "animateRows": True,
+                             "rowHeight": 56},
             style={"height": "520px"},
         ),
         dcc.Interval(id="boot", interval=100, max_intervals=1),

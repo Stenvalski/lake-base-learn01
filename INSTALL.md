@@ -170,6 +170,24 @@ Pin the venv to 3.12, which also matches the Databricks Apps runtime.
 selection. Row grouping, pivoting, Excel export and master/detail are
 Enterprise and need a paid licence.
 
+### Wrapped text is clipped to one line
+
+AG Grid sets each cell's `line-height` to the row height (e.g. 41px). With
+`wrapText` the text does wrap, but every wrapped line is then 41px tall, so
+only the first is visible -- it looks like wrapping is broken when it is not.
+Inspecting the cell shows `scrollHeight` roughly double `clientHeight`.
+
+Fix: override the line height in `cellStyle`, and set an explicit `rowHeight`:
+
+    {"field": "description", "wrapText": True,
+     "cellStyle": {"lineHeight": "1.4", "whiteSpace": "normal",
+                   "display": "flex", "alignItems": "center"}}
+
+`autoHeight` is an alternative in principle, but it did not take effect here
+and silently left rows at their default height. An explicit `rowHeight` is
+predictable. Note also that `autoHeight` on **two** columns at once broke
+wrapping entirely.
+
 ### Testing an editable grid
 
 A synthetic `Return` keypress does **not** commit AG Grid's cell editor under
