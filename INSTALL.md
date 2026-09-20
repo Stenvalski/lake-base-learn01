@@ -51,6 +51,17 @@ binary explicitly.
 
     /opt/homebrew/opt/postgresql@17/bin/pg_dump --version
 
+### Better: mint tokens with the CLI
+
+Once `databricks auth login` is done, skip the clipboard entirely:
+
+    databricks postgres generate-database-credential \
+      projects/learn01/branches/production/endpoints/primary \
+      -p learn01 --output json
+
+The `fw` wrapper uses this when a profile exists and falls back to the
+clipboard otherwise.
+
 ### Keeping the token out of files
 
 The token is on the clipboard after clicking "Copy OAuth token", so pass it
@@ -343,6 +354,33 @@ role. The app mints its own token per connection -- no clipboard involved.
 The first visit shows "Permission Requested -- this app is requesting
 permission to act on your behalf". Click **Authorize**. Until then the app
 URL only shows the consent screen.
+
+### Error: the app connects but every query fails
+
+    psycopg.errors.InsufficientPrivilege: permission denied for table country
+
+Databricks grants the app's service principal a Postgres role with CONNECT
+and CREATE, but **no rights on tables owned by your own role**. The app
+authenticates fine and then cannot read anything. Grant explicitly -- as a
+migration, so it is reproducible:
+
+    GRANT USAGE ON SCHEMA public TO "<client-id>";
+    GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO "<client-id>";
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public
+        GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "<client-id>";
+
+### Gotcha: the Postgres role name is not the Lakebase role id
+
+    ERROR: role "dbrx-apps-30b6f312-..." does not exist
+
+`databricks postgres list-roles` reports a `role_id` of
+`dbrx-apps-<client-id>`, but the actual Postgres role is the **bare client
+id**. Read `status.postgres_role`, or list them from Postgres directly:
+
+    SELECT rolname FROM pg_roles WHERE rolname NOT LIKE 'pg\_%';
+
+A migration that fails mid-way leaves Flyway's history marked failed; run
+`./fw repair` before retrying.
 
 ### Free Edition limits
 

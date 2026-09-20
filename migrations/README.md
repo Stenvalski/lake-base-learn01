@@ -17,22 +17,26 @@ Project `learn01` / branch `production` / database `databricks_postgres`
       V7__repoint_residency_requirement.sql      FK moved to the identity table
       V8__drop_country_version_alpha2.sql        alpha2 now lives only on country
       V9__country_version_no_overlap.sql         EXCLUDE constraint on version intervals
+      V10__grant_app_service_principal.sql       table grants for the Databricks App
 
 ## Auth
 
 The Postgres password is a Databricks OAuth token that **expires after 1 hour**.
-Get a fresh one from the workspace: Lakebase Postgres -> learn01 -> Connect ->
-"Copy OAuth token", then run commands through `./fw`, which reads the clipboard:
+`./fw` mints one automatically via the Databricks CLI (profile `learn01`), and
+falls back to the clipboard -- Lakebase Postgres -> learn01 -> Connect ->
+"Copy OAuth token" -- if no profile is configured:
 
     ./fw info
     ./fw migrate
 
-Never put the token in flyway.conf. For CI, replace `pbpaste` in `fw` with a
-Databricks CLI token fetch.
+Never put the token in flyway.conf.
+
+`run-local.sh` still uses the clipboard; the app itself mints its own token
+when deployed.
 
 ## State
 
-At V9 as of 2026-09-20. `./fw info` is the source of truth.
+At V10 as of 2026-09-21. `./fw info` is the source of truth.
 
 `public.country` predates Flyway, so V1 is recorded as Ignored (Baseline) and
 is never executed; the table it describes already exists. V2 and V3 ran for
@@ -74,7 +78,7 @@ running to 'infinity'.
 
 ## Adding a change
 
-Drop a new file in migrations/ named V9__<description>.sql, then:
+Drop a new file in migrations/ named V11__<description>.sql, then:
 
     ./fw info      # confirm it shows Pending
     ./fw migrate

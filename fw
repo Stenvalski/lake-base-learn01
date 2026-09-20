@@ -1,5 +1,12 @@
 #!/bin/sh
-# Run flyway with the Lakebase OAuth token pulled from the clipboard,
-# so the token is never written to disk or echoed.
-# Refresh it from the workspace Connect dialog -> "Copy OAuth token" (expires hourly).
-exec flyway -configFiles=flyway.conf -password="$(pbpaste)" "$@"
+# Run flyway against Lakebase.
+#
+# Token order: the Databricks CLI if a profile is available (no clipboard
+# juggling, no hourly expiry to think about), otherwise whatever is on the
+# clipboard from the Connect dialog.
+ENDPOINT=projects/learn01/branches/production/endpoints/primary
+TOKEN=$(databricks postgres generate-database-credential "$ENDPOINT" \
+          -p learn01 --output json 2>/dev/null \
+        | python3 -c "import json,sys; print(json.load(sys.stdin)['token'])" 2>/dev/null)
+[ -z "$TOKEN" ] && TOKEN=$(pbpaste)
+exec flyway -configFiles=flyway.conf -password="$TOKEN" "$@"
