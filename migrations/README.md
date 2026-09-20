@@ -18,6 +18,7 @@ Project `learn01` / branch `production` / database `databricks_postgres`
       V8__drop_country_version_alpha2.sql        alpha2 now lives only on country
       V9__country_version_no_overlap.sql         EXCLUDE constraint on version intervals
       V10__grant_app_service_principal.sql       table grants for the Databricks App
+      V11__revoke_app_access_to_schema_history.sql keeps the app out of flyway's history
 
 ## Auth
 
@@ -36,7 +37,7 @@ when deployed.
 
 ## State
 
-At V10 as of 2026-09-21. `./fw info` is the source of truth.
+At V11 as of 2026-09-21. `./fw info` is the source of truth.
 
 `public.country` predates Flyway, so V1 is recorded as Ignored (Baseline) and
 is never executed; the table it describes already exists. V2 and V3 ran for
@@ -78,7 +79,7 @@ running to 'infinity'.
 
 ## Adding a change
 
-Drop a new file in migrations/ named V11__<description>.sql, then:
+Drop a new file in migrations/ named V12__<description>.sql, then:
 
     ./fw info      # confirm it shows Pending
     ./fw migrate
@@ -94,6 +95,8 @@ Drop a new file in migrations/ named V11__<description>.sql, then:
 - `country.id` is GENERATED ALWAYS AS IDENTITY -- INSERTs must omit it, and
   gaps in the sequence are normal.
 - Never edit an applied migration; add a new version that reverses it.
+- `GRANT ... ON ALL TABLES` also catches `flyway_schema_history`. Revoke it
+  afterwards (V11) or grant table by table.
 - Query current names through `country_version` with `WHERE current`; the
   identity table carries no name.
 - A partial unique index cannot be a foreign key target in Postgres
