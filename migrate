@@ -1,0 +1,14 @@
+#!/bin/sh
+# Run yoyo against learn01, for example: ./migrate list, ./migrate apply
+#
+# The password is a Lakebase OAuth token (valid one hour) minted by the
+# Databricks CLI and passed through PGPASSWORD, which psycopg reads directly.
+# APP_ROLE is learn01's app role, read by migrations/0002_app_grants.py.
+set -e
+ENDPOINT=projects/learn01/branches/production/endpoints/primary
+PGPASSWORD=$(databricks postgres generate-database-credential "$ENDPOINT" \
+               -p learn01 --output json \
+             | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])')
+export PGPASSWORD
+export APP_ROLE=30b6f312-afd6-4fe2-8f99-7323014dd570
+exec .venv/bin/yoyo "$@"

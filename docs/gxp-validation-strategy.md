@@ -17,14 +17,14 @@ The regulated object is the whole computerised system, not just the application 
 | Component | GAMP 5 category | What validation requires |
 | --- | --- | --- |
 | Databricks platform, Lakebase Postgres 17 | 1 — infrastructure | Supplier assessment, qualification of the hosted service, shared-responsibility mapping |
-| Flyway, Dash, dash-ag-grid, psycopg, gunicorn | 1 / 3 — used as supplied | Supplier assessment, pinned versions, no code modification |
+| yoyo-migrations, Dash, dash-ag-grid, psycopg, gunicorn | 1 / 3 — used as supplied | Supplier assessment, pinned versions, no code modification |
 | `migrations/V1`–`V11` (schema DDL) | 5 — custom | Review, test evidence, change control |
 | `app/app.py`, `app/db.py` | 5 — custom | Full lifecycle: specification, code review, testing, traceability |
 | Deployment path (Databricks CLI, `fw` wrapper) | 5 — custom tooling | Qualification if used to make GxP changes |
 
 Only the custom rows carry heavy effort, and that is where all business logic sits. The dependency versions are pinned in `app/requirements.txt`, which is a precondition for any supplier assessment to mean anything.
 
-One structural point in the system's favour: the schema is defined entirely by versioned, checksummed migrations. A new database can be built from source using the B12 baseline file, which holds the full schema and reference data. Building an empty database from it gives a schema identical to production, confirmed by comparing schema dumps. Replaying V1–V12 alone does not work: V5 depends on rows typed in by hand, and V10–V12 name a role that exists only in production. That is why the baseline exists.
+One structural point in the system's favour: the schema is defined entirely by migrations in source control. A new database can be built from source using the baseline migration, 0001_baseline.sql, which holds the full schema and reference data. Building an empty database from it gives a schema identical to production, confirmed by comparing schema dumps. The project's earlier Flyway history could not do this, because two of its migrations depended on state that existed only in production. The baseline replaced that history.
 
 ## Regulatory frame
 
@@ -56,8 +56,9 @@ Two of these are blockers: no strategy succeeds without an audit trail and user 
 | 8 | Free Edition: one project, no environment separation, app stops after 24h, no SLA | Blocker for production | No validated environment can exist here |
 | 9 | Operational tokens handled via clipboard | Medium | Not a controlled, repeatable procedure |
 | 10 | Seed data is fabricated | Medium | Must be replaced by a controlled data load |
+| 11 | The migration tool, yoyo-migrations, does not detect edits to migrations that have already run. It identifies a migration by its file name, not its contents | Medium | An altered migration goes unnoticed; change control rests on git history and review instead of a technical check |
 
-What is already sound: versioned migrations with checksums and forward-only retraction; `country_version` implementing proper temporal history with an `EXCLUDE` constraint preventing overlapping validity periods; least-privilege grants to the app's role; and referential integrity enforced in the schema rather than in application code.
+What is already sound: versioned migrations with forward-only retraction; `country_version` implementing proper temporal history with an `EXCLUDE` constraint preventing overlapping validity periods; least-privilege grants to the app's role; and referential integrity enforced in the schema rather than in application code.
 
 The irony worth noting is that `country` has rigorous history tracking while `residency_requirement` — the table the app actually edits — has none.
 
@@ -85,7 +86,7 @@ Scope effort by risk, following FDA's CSA thinking and GAMP 5's critical thinkin
 
 Test execution in the deployment pipeline produces the validation records. Re-validation after a change is a pipeline run, not a paperwork exercise.
 
-- **Pros.** Fits this system's existing shape. The B12 baseline gives every new database the same verified starting schema, and Lakebase branching can give each test run a clean, realistic database. Cheap re-validation means it actually happens after every change, rather than being deferred.
+- **Pros.** Fits this system's existing shape. The baseline migration gives every new database the same verified starting schema, and Lakebase branching can give each test run a clean, realistic database. Cheap re-validation means it actually happens after every change, rather than being deferred.
 - **Cons.** The pipeline and the test tooling themselves must be qualified. Higher upfront engineering cost. Requires disciplined configuration management. Meets cultural resistance where QA expects signed documents.
 - **Choose it when** the system will change regularly and the team can invest in the pipeline first.
 
@@ -111,7 +112,7 @@ Combine strategies 2 and 3: risk-based scope, with automated tests as the primar
 
 The reasoning is that this system will keep changing. Between the prototype and today it went through eleven schema migrations, two of which reversed earlier decisions. A strategy that makes change expensive will not be followed; it will be circumvented, and circumvention is worse than a lighter strategy properly applied.
 
-The system also happens to be unusually well suited to automated evidence. The schema can be rebuilt from source through the B12 baseline, the database supports cheap branching for test fixtures, and the deployment path is already scripted.
+The system also happens to be unusually well suited to automated evidence. The schema can be rebuilt from source through the baseline migration, the database supports cheap branching for test fixtures, and the deployment path is already scripted.
 
 Strategy 4 deserves a genuine look before committing engineering effort. If a commercial product fits the process, it will reach a validated state sooner than building the missing controls here. That comparison is worth making explicitly rather than by default.
 
@@ -136,7 +137,7 @@ Validation covers the system and the procedures around it, not only the code. Th
 
 **Supplier assessment.** Databricks must be assessed as a supplier, and the shared-responsibility boundary documented: what they qualify, what you qualify. Cloud platforms change under you without a change request on your side, which needs an explicit position.
 
-**Change control.** Source control and migrations give strong technical change management, but a GxP change control procedure must sit on top — who approves a schema change, what testing is required, how emergency changes are handled retrospectively.
+**Change control.** Source control and migrations give technical change management, but a GxP change control procedure must sit on top — who approves a schema change, what testing is required, how emergency changes are handled retrospectively.
 
 **Configuration management.** Pinned dependency versions, recorded platform versions, and a defined procedure for upgrades. A Databricks runtime upgrade is a change to a validated system.
 

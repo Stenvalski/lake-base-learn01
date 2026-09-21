@@ -59,7 +59,8 @@ Once `databricks auth login` is done, skip the clipboard entirely:
       projects/learn01/branches/production/endpoints/primary \
       -p learn01 --output json
 
-The `fw` wrapper uses this when a profile exists and falls back to the
+The `migrate` wrapper uses this (section 11). The earlier Flyway wrapper used
+it when a profile existed and fell back to the
 clipboard otherwise.
 
 ### Keeping the token out of files
@@ -77,7 +78,11 @@ That means the clipboard changed, not that anything is broken. Re-copy.
 
 ---
 
-## 3. Flyway
+## 3. Flyway (superseded -- see section 11)
+
+The project started on Flyway and switched to yoyo-migrations in section 11.
+This section records how the Flyway setup worked.
+
 
     brew install flyway
 
@@ -380,13 +385,26 @@ id**. Read `status.postgres_role`, or list them from Postgres directly:
     SELECT rolname FROM pg_roles WHERE rolname NOT LIKE 'pg\_%';
 
 A migration that fails mid-way leaves Flyway's history marked failed; run
-`./fw repair` before retrying.
+`./fw repair` before retrying. (Flyway-era; yoyo has no equivalent step.)
 
 ### Free Edition limits
 
 Up to 3 apps per account. An app stops automatically **24 hours** after being
-started or redeployed; restart it from the workspace or with
-`databricks apps start`.
+started or redeployed.
+
+### Gotcha: after the 24-hour stop, `start` is not enough
+
+    app: UNAVAILABLE | compute: ACTIVE
+
+The stop also clears the active deployment, so `databricks apps start` brings
+back compute with nothing running on it. Redeploy as well:
+
+    databricks apps start residency-requirements -p learn01
+    databricks apps deploy residency-requirements \
+      --source-code-path /Workspace/Users/<you>/residency-requirements -p learn01
+
+The stop reason reads "App compute was stopped due to workspace or account
+status" -- it is the Free Edition limit, not a fault.
 
 ---
 
@@ -456,10 +474,79 @@ Use `PGHOST`, `PGPORT` and `PGUSER` instead.
 Verify by diffing `pg_dump --schema-only --schema=public` of the new database
 against learn01, after removing the Databricks functions from learn01's side.
 
-## 11. Useful commands
+## 11. Switching from Flyway to yoyo-migrations
 
-    ./fw info                          # migration state
-    ./fw migrate                       # apply pending migrations
+Done on 2026-09-21 to match the setup used at work. yoyo is a Python library,
+so it installs with `uv` beside the app instead of needing Java.
+
+    VIRTUAL_ENV=.venv uv pip install -r requirements-dev.txt
+
+### What yoyo does not do
+
+**It does not detect edits to applied migrations.** yoyo identifies a
+migration by a hash of its file name, not its contents
+(`yoyo/migrations.py`, `get_migration_hash`). Tested: after applying a
+migration, rewriting the file and running `yoyo apply` again exits 0 and
+still lists it as applied. Flyway would refuse to run. Treat applied files as
+read-only by convention, and rely on git history and review to catch edits.
+
+It also has no placeholders and no baseline-skip logic, which shaped the
+layout below.
+
+### Layout
+
+yoyo cannot run a baseline "instead of" older migrations the way Flyway's B12
+did, so V1-V12 cannot sit beside it. The history was squashed:
+
+- `migrations/0001_baseline.sql` -- the B12 baseline without its grants.
+- `migrations/0002_app_grants.py` -- the grants, as a Python migration reading
+  the role from `APP_ROLE`, since yoyo SQL files cannot take placeholders.
+  Uses `psycopg.sql.Identifier` to quote the role safely.
+- `archive/flyway-migrations/` -- V1-V12 and B12, moved with `git mv`.
+
+Config lives in `yoyo.ini` with no password. `./migrate` mints a token with
+the Databricks CLI and passes it through `PGPASSWORD`, which psycopg reads
+directly -- so the token stays out of the URL and the config file.
+
+### Gotcha: `%` in yoyo.ini
+
+yoyo reads `yoyo.ini` with Python's configparser, which treats `%` as an
+escape. The percent-encoded `@` in the username must be written `%%40`.
+
+### Gotcha: yoyo's own tables inherit default privileges
+
+yoyo creates `_yoyo_migration`, `_yoyo_log`, `_yoyo_version` and `yoyo_lock`
+in `public`. On learn01, Flyway's V10 had set `ALTER DEFAULT PRIVILEGES`, so
+those new tables were automatically granted to the app -- the same trap as
+`flyway_schema_history` in V11. `0002_app_grants.py` revokes the app's rights
+on all bookkeeping tables and removes the default privileges, so every grant
+is now explicit.
+
+### Moving learn01 across
+
+learn01 already had the schema, so the baseline was marked, not run:
+
+    ./migrate mark -r 0001_baseline
+    ./migrate apply                     # runs 0002 for real
+
+`0002` is safe to run on a database that already has the grants: repeating a
+GRANT changes nothing, and it removes what needed removing.
+`flyway_schema_history` stays in learn01 as the record of what Flyway ran.
+
+### Verification
+
+On an empty local Postgres 17, `yoyo apply` built a schema identical to
+learn01 (diff of `pg_dump --schema-only`), with the same row counts, an empty
+audit log and a working trigger. The audit function's `$$`-quoted body, which
+contains semicolons, came through intact -- yoyo did not split it. On learn01,
+the app role holds rights on `country`, `country_version` and
+`residency_requirement` only, with no default privileges left, and the
+deployed app still loads.
+
+## 12. Useful commands
+
+    ./migrate list                     # migration state
+    ./migrate apply                    # apply pending migrations
     ./run-local.sh                     # run the app locally (token on clipboard)
     databricks apps logs residency-requirements --tail-lines 100 -p learn01
     databricks apps get residency-requirements -p learn01
