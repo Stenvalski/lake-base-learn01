@@ -24,7 +24,7 @@ The regulated object is the whole computerised system, not just the application 
 
 Only the custom rows carry heavy effort, and that is where all business logic sits. The dependency versions are pinned in `app/requirements.txt`, which is a precondition for any supplier assessment to mean anything.
 
-One structural point in the system's favour: the schema is defined entirely by versioned, checksummed migrations. A validated database state can be reproduced from source on demand, which is unusual and materially helpful for qualification.
+One structural point in the system's favour: the schema is defined entirely by versioned, checksummed migrations. A new database can be built from source using the B12 baseline file, which holds the full schema and reference data. Building an empty database from it gives a schema identical to production, confirmed by comparing schema dumps. Replaying V1–V12 alone does not work: V5 depends on rows typed in by hand, and V10–V12 name a role that exists only in production. That is why the baseline exists.
 
 ## Regulatory frame
 
@@ -85,7 +85,7 @@ Scope effort by risk, following FDA's CSA thinking and GAMP 5's critical thinkin
 
 Test execution in the deployment pipeline produces the validation records. Re-validation after a change is a pipeline run, not a paperwork exercise.
 
-- **Pros.** Fits this system's existing shape. Flyway already gives deterministic, reproducible schema state, and Lakebase branching can give each test run a clean, realistic database. Cheap re-validation means it actually happens after every change, rather than being deferred.
+- **Pros.** Fits this system's existing shape. The B12 baseline gives every new database the same verified starting schema, and Lakebase branching can give each test run a clean, realistic database. Cheap re-validation means it actually happens after every change, rather than being deferred.
 - **Cons.** The pipeline and the test tooling themselves must be qualified. Higher upfront engineering cost. Requires disciplined configuration management. Meets cultural resistance where QA expects signed documents.
 - **Choose it when** the system will change regularly and the team can invest in the pipeline first.
 
@@ -111,7 +111,7 @@ Combine strategies 2 and 3: risk-based scope, with automated tests as the primar
 
 The reasoning is that this system will keep changing. Between the prototype and today it went through eleven schema migrations, two of which reversed earlier decisions. A strategy that makes change expensive will not be followed; it will be circumvented, and circumvention is worse than a lighter strategy properly applied.
 
-The system also happens to be unusually well suited to automated evidence. The schema is reproducible from source, the database supports cheap branching for test fixtures, and the deployment path is already scripted.
+The system also happens to be unusually well suited to automated evidence. The schema can be rebuilt from source through the B12 baseline, the database supports cheap branching for test fixtures, and the deployment path is already scripted.
 
 Strategy 4 deserves a genuine look before committing engineering effort. If a commercial product fits the process, it will reach a validated state sooner than building the missing controls here. That comparison is worth making explicitly rather than by default.
 

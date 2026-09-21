@@ -30,6 +30,7 @@ Project `learn01` / branch `production` / database `databricks_postgres`
       V10__grant_app_service_principal.sql       table grants for the Databricks App
       V11__revoke_app_access_to_schema_history.sql keeps the app out of flyway's history
       V12__audit_trail.sql                       audit_log + trigger, with end-user attribution
+      B12__baseline.sql                          everything above in one file, for NEW databases
 
 ## Auth
 
@@ -88,6 +89,27 @@ a clean handover (one row's active_to equal to the next's active_from) is
 allowed while any real overlap is rejected. An open-ended row is treated as
 running to 'infinity'.
 
+## Build a new database
+
+Run Flyway against an empty database. It runs `B12__baseline.sql` only, skips
+V1-V12, then runs anything from V13 on:
+
+    flyway -url=jdbc:postgresql://<host>/<db> -user=<user> -password=<token> \
+           -locations=filesystem:migrations -placeholders.app_role=<app role> migrate
+
+`app_role` is the Postgres role of the app that will use this database -- the
+bare service principal client id on Databricks Apps. For learn01 it is set in
+`flyway.conf`.
+
+Why a baseline: replaying V1-V12 on an empty database fails. V5 needs country
+rows that were typed in by hand before Flyway was used, and V10-V12 name
+learn01's app role, which exists nowhere else. On learn01, Flyway lists the
+baseline as `Ignored`, because that database already has its history.
+
+Verified 2026-09-21: an empty Postgres 17 database built from the baseline has
+a schema identical to learn01 (compared with `pg_dump --schema-only`), the same
+row counts, an empty audit log, and a working audit trigger.
+
 ## Audit trail
 
 Every INSERT, UPDATE and DELETE on `residency_requirement` writes one
@@ -125,6 +147,9 @@ Drop a new file in migrations/ named V13__<description>.sql, then:
 - `country.id` is GENERATED ALWAYS AS IDENTITY -- INSERTs must omit it, and
   gaps in the sequence are normal.
 - Never edit an applied migration; add a new version that reverses it.
+- Refer to the app's role as `"${app_role}"` in new migrations, never by its
+  literal name. V10-V12 hard-code learn01's role, which is why they cannot run
+  anywhere else.
 - `GRANT ... ON ALL TABLES` also catches `flyway_schema_history`. Revoke it
   afterwards (V11) or grant table by table.
 - Query current names through `country_version` with `WHERE current`; the

@@ -362,7 +362,7 @@ URL only shows the consent screen.
 Databricks grants the app's service principal a Postgres role with CONNECT
 and CREATE, but **no rights on tables owned by your own role**. The app
 authenticates fine and then cannot read anything. Grant explicitly -- as a
-migration, so it is reproducible:
+migration, so the change is recorded and versioned:
 
     GRANT USAGE ON SCHEMA public TO "<client-id>";
     GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO "<client-id>";
@@ -390,7 +390,73 @@ started or redeployed; restart it from the workspace or with
 
 ---
 
-## 10. Useful commands
+## 10. Rebuilding from an empty database
+
+Replaying V1-V12 on an empty database fails, which contradicted what the docs
+claimed until 2026-09-21. The fix is a baseline file; everything that went
+wrong building it is below.
+
+**V5 fails on a foreign key.**
+
+    ERROR: insert or update on table "residency_requirement" violates foreign
+    key constraint "residency_requirement_country_id_fkey"
+
+V5 inserts requirements for countries 1, 3 and 5, but no migration creates
+those countries -- they were typed into the Lakebase SQL editor before Flyway
+was in use. A migration history is only reproducible if every row it depends
+on also came from a migration.
+
+**V10 fails on a missing role.**
+
+    ERROR: role "30b6f312-afd6-4fe2-8f99-7323014dd570" does not exist
+
+V10-V12 name learn01's app role literally. Use a Flyway placeholder,
+`"${app_role}"`, in anything environment-specific.
+
+**Fix: `B12__baseline.sql`.** Flyway OSS supports baseline migrations (a `B`
+prefix) -- earlier notes guessed it needed the paid edition; it does not. On an
+empty database Flyway runs only the baseline, then V13+. On a database that
+already has history, it lists the baseline as `Ignored`.
+
+Building the baseline from `pg_dump --schema=public --no-owner
+--no-privileges --column-inserts` needed four corrections:
+
+- **`btree_gist` was missing.** Dumping a single schema omits extensions, and
+  the `country_version` no-overlap constraint needs it. Added
+  `CREATE EXTENSION IF NOT EXISTS btree_gist` at the top.
+- **Three Databricks functions leaked in.** `grant_select_on_new_objects`,
+  `grant_usage_on_new_schema` and `grant_all_on_new_sequences` are
+  event-trigger plumbing Lakebase installs in `public` itself. Removed.
+- **psql-only lines.** `\restrict`/`\unrestrict` and the session `SET`s are
+  psql commands Flyway cannot run. Removed, along with `CREATE SCHEMA public`.
+- **Grants.** Written per table with `${app_role}`, so `audit_log` and
+  `flyway_schema_history` stay out of the app's reach.
+
+`--column-inserts` matters: Flyway cannot run `COPY ... FROM stdin` blocks,
+and pg_dump emits `OVERRIDING SYSTEM VALUE` for identity columns
+automatically. Data loads before the audit trigger is created, so the seed
+rows do not generate audit entries.
+
+### Testing locally
+
+A throwaway Postgres 17 from Homebrew, with three traps on macOS:
+
+    initdb: error: invalid locale settings
+    FATAL: postmaster became multithreaded during startup
+
+Both mean the locale is unset in a non-interactive shell. Export
+`LC_ALL=C LANG=C` and pass `--locale=C` to `initdb`.
+
+Unix socket paths are limited to about 103 characters, so a deeply nested data
+directory fails to start. Listen on TCP only: `pg_ctl -o "-p 55432 -k ''"`.
+
+In zsh, `L="-h host -p port"; psql $L` does not split into separate arguments.
+Use `PGHOST`, `PGPORT` and `PGUSER` instead.
+
+Verify by diffing `pg_dump --schema-only --schema=public` of the new database
+against learn01, after removing the Databricks functions from learn01's side.
+
+## 11. Useful commands
 
     ./fw info                          # migration state
     ./fw migrate                       # apply pending migrations
