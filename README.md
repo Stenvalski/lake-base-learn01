@@ -1,5 +1,15 @@
 # Lakebase DDL deployment — learn01
 
+A learning project: schema-as-code for a Databricks Lakebase (Postgres 17)
+database using Flyway, plus a Dash + AG Grid app, deployed on Databricks Apps,
+for viewing and editing residency requirements. The sample data is
+fabricated -- not real immigration requirements.
+
+- [INSTALL.md](INSTALL.md) -- building the whole stack from scratch, including
+  every error hit along the way and its fix.
+- [docs/gxp-validation-strategy.md](docs/gxp-validation-strategy.md) -- what it
+  would take to validate the app for regulated (GxP) use.
+
 Project `learn01` / branch `production` / database `databricks_postgres`
 (AWS us-east-2, Postgres 17, 1 CU, scale-to-zero).
 
